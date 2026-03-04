@@ -17,7 +17,7 @@ TIMESCALE_CONN = {
 }
 
 def fetch_and_store_ohlcv(**context):
-    execution_date = context["execution_date"]
+    execution_date = context["logical_date"]
     date_str = execution_date.strftime("%Y-%m-%d")
 
     conn = psycopg2.connect(**TIMESCALE_CONN)
