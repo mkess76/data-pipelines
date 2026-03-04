@@ -13,14 +13,14 @@ TIMESCALE_CONN = {
     "port": 5432,
     "dbname": "postgres",
     "user": "postgres",
-    "password": "postgres"
+    "password": "rancherlab"
 }
 
 def fetch_and_store_ohlcv(**context):
     execution_date = context.get("data_interval_end") or context.get("logical_date") or __import__("datetime").datetime.utcnow()
     date_str = execution_date.strftime("%Y-%m-%d")
 
-    conn = psycopg2.connect(**TIMESCALE_CONN)
+    conn = psycopg2.connect(**TIMESCALE_CONN, sslmode="disable")
     cur = conn.cursor()
 
     rows = []
