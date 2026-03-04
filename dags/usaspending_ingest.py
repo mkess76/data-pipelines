@@ -14,9 +14,13 @@ POSTGRES_CONN = {
 }
 
 def fetch_and_store_awards(**context):
-    execution_date = context.get("data_interval_end") or context.get("logical_date") or __import__("datetime").datetime.utcnow()
-    date_str = execution_date.strftime("%Y-%m-%d")
-    prev_date_str = (execution_date - timedelta(days=1)).strftime("%Y-%m-%d")
+    # Use a 30-day window ending yesterday for reliable data
+    end_date = datetime.utcnow() - timedelta(days=1)
+    start_date = end_date - timedelta(days=30)
+    date_str = end_date.strftime("%Y-%m-%d")
+    prev_date_str = start_date.strftime("%Y-%m-%d")
+
+    print(f"Fetching awards from {prev_date_str} to {date_str}")
 
     url = "https://api.usaspending.gov/api/v2/search/spending_by_award/"
     payload = {
@@ -40,9 +44,8 @@ def fetch_and_store_awards(**context):
 
     conn = psycopg2.connect(**POSTGRES_CONN)
     cur = conn.cursor()
-    rows = []
-    page = 1
     total_inserted = 0
+    page = 1
 
     while True:
         payload["page"] = page
@@ -54,6 +57,7 @@ def fetch_and_store_awards(**context):
         if not results:
             break
 
+        rows = []
         for r in results:
             rows.append((
                 r.get("Award ID"),
@@ -71,21 +75,19 @@ def fetch_and_store_awards(**context):
                 r.get("Award Type")
             ))
 
-        if rows:
-            execute_values(cur, """
-                INSERT INTO raw.contract_awards (
-                    award_id, award_date, agency_name, agency_id,
-                    vendor_name, vendor_uei, naics_code, naics_description,
-                    award_amount, period_of_perf_start, period_of_perf_end,
-                    place_of_performance_state, award_type
-                ) VALUES %s
-                ON CONFLICT (award_id) DO UPDATE SET
-                    award_amount = EXCLUDED.award_amount,
-                    loaded_at = NOW()
-            """, rows)
-            conn.commit()
-            total_inserted += len(rows)
-            rows = []
+        execute_values(cur, """
+            INSERT INTO raw.contract_awards (
+                award_id, award_date, agency_name, agency_id,
+                vendor_name, vendor_uei, naics_code, naics_description,
+                award_amount, period_of_perf_start, period_of_perf_end,
+                place_of_performance_state, award_type
+            ) VALUES %s
+            ON CONFLICT (award_id) DO UPDATE SET
+                award_amount = EXCLUDED.award_amount,
+                loaded_at = NOW()
+        """, rows)
+        conn.commit()
+        total_inserted += len(rows)
 
         if not data.get("page_metadata", {}).get("hasNext", False):
             break
