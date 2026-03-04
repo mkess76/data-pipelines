@@ -20,7 +20,7 @@ def fetch_and_store_ohlcv(**context):
     execution_date = context.get("data_interval_end") or context.get("logical_date") or __import__("datetime").datetime.utcnow()
     date_str = execution_date.strftime("%Y-%m-%d")
 
-    conn = psycopg2.connect(**TIMESCALE_CONN, sslmode="disable")
+    conn = psycopg2.connect(**TIMESCALE_CONN, sslmode="require")
     cur = conn.cursor()
 
     rows = []
