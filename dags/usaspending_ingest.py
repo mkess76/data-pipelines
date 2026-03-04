@@ -75,6 +75,12 @@ def fetch_and_store_awards(**context):
                 r.get("Award Type")
             ))
 
+        # Deduplicate rows by award_id before insert
+        seen = {}
+        for row in rows:
+            seen[row[0]] = row
+        rows = list(seen.values())
+
         execute_values(cur, """
             INSERT INTO raw.contract_awards (
                 award_id, award_date, agency_name, agency_id,
