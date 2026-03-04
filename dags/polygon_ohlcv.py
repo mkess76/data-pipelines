@@ -18,7 +18,12 @@ TIMESCALE_CONN = {
 
 def fetch_and_store_ohlcv(**context):
     execution_date = context.get("data_interval_end") or context.get("logical_date") or __import__("datetime").datetime.utcnow()
-    date_str = execution_date.strftime("%Y-%m-%d")
+    # Use previous trading day for Polygon free tier
+    from datetime import date
+    today = execution_date if execution_date else __import__("datetime").datetime.utcnow()
+    # Go back 2 days to ensure data is available on free tier
+    trade_date = today - __import__("datetime").timedelta(days=2)
+    date_str = trade_date.strftime("%Y-%m-%d")
 
     conn = psycopg2.connect(**TIMESCALE_CONN, sslmode="require")
     cur = conn.cursor()
