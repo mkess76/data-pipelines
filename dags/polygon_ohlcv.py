@@ -30,8 +30,10 @@ def fetch_and_store_ohlcv(**context):
 
     rows = []
     for ticker in TICKERS:
+        import time
         url = f"https://api.polygon.io/v2/aggs/ticker/{ticker}/range/1/day/{date_str}/{date_str}"
         params = {"apiKey": POLYGON_API_KEY, "adjusted": "true"}
+        time.sleep(15)  # Polygon free tier: 5 calls/min
         resp = requests.get(url, params=params, timeout=30)
         resp.raise_for_status()
         data = resp.json()
