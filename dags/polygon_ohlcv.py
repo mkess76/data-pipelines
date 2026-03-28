@@ -2,6 +2,7 @@ from airflow import DAG
 from airflow.operators.python import PythonOperator
 from datetime import datetime, timedelta
 import requests
+import time
 import psycopg2
 from psycopg2.extras import execute_values
 
@@ -16,27 +17,37 @@ TIMESCALE_CONN = {
     "password": "rancherlab"
 }
 
+def fetch_ticker(ticker, date_str, retries=3):
+    """Fetch a single ticker with retry on rate limit."""
+    for attempt in range(retries):
+        resp = requests.get(
+            f"https://api.polygon.io/v2/aggs/ticker/{ticker}/range/1/day/{date_str}/{date_str}",
+            params={"apiKey": POLYGON_API_KEY, "adjusted": "true"},
+            timeout=30
+        )
+        if resp.status_code == 429:
+            wait = 60 * (attempt + 1)
+            print(f"Rate limited on {ticker}, waiting {wait}s (attempt {attempt + 1}/{retries})")
+            time.sleep(wait)
+            continue
+        resp.raise_for_status()
+        return resp.json()
+    raise Exception(f"Rate limited on {ticker} after {retries} retries")
+
 def fetch_and_store_ohlcv(**context):
-    execution_date = context.get("data_interval_end") or context.get("logical_date") or __import__("datetime").datetime.utcnow()
-    # Use previous trading day for Polygon free tier
-    from datetime import date
-    today = execution_date if execution_date else __import__("datetime").datetime.utcnow()
-    # Go back 2 days to ensure data is available on free tier
-    trade_date = today - __import__("datetime").timedelta(days=2)
+    execution_date = context.get("data_interval_end") or context.get("logical_date") or datetime.utcnow()
+    trade_date = execution_date - timedelta(days=2)
     date_str = trade_date.strftime("%Y-%m-%d")
 
     conn = psycopg2.connect(**TIMESCALE_CONN, sslmode="require")
     cur = conn.cursor()
 
     rows = []
-    for ticker in TICKERS:
-        import time
-        url = f"https://api.polygon.io/v2/aggs/ticker/{ticker}/range/1/day/{date_str}/{date_str}"
-        params = {"apiKey": POLYGON_API_KEY, "adjusted": "true"}
-        time.sleep(15)  # Polygon free tier: 5 calls/min
-        resp = requests.get(url, params=params, timeout=30)
-        resp.raise_for_status()
-        data = resp.json()
+    for i, ticker in enumerate(TICKERS):
+        if i > 0:
+            time.sleep(20)  # Polygon free tier: 5 calls/min
+
+        data = fetch_ticker(ticker, date_str)
 
         if data.get("resultsCount", 0) == 0:
             print(f"No data for {ticker} on {date_str}")
@@ -66,13 +77,15 @@ def fetch_and_store_ohlcv(**context):
         """, rows)
         conn.commit()
         print(f"Inserted {len(rows)} rows for {date_str}")
+    else:
+        print(f"No rows to insert for {date_str}")
 
     cur.close()
     conn.close()
 
 default_args = {
     "retries": 3,
-    "retry_delay": timedelta(minutes=5)
+    "retry_delay": timedelta(minutes=10)
 }
 
 with DAG(
