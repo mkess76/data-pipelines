@@ -6,7 +6,8 @@ import time
 import psycopg2
 from psycopg2.extras import execute_values
 
-POLYGON_API_KEY = "VqDMSwWfyZvcGQV51pxkGjs4NzM1r0PD"
+import os
+POLYGON_API_KEY = os.environ["POLYGON_API_KEY"]
 TICKERS = ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA"]
 
 TIMESCALE_CONN = {
